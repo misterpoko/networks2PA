@@ -32,18 +32,21 @@ def send(sock: socket.socket, data: bytes):
     # network "rest" :)
     logger = util.logging.get_logger("project-sender")
     chunk_size = util.MAX_PACKET-8
-    pause = .01
-    sock.settimeout(.01)
+    pause = .0001
+    sock.settimeout(.00001)
     offsets = range(0, len(data), util.MAX_PACKET-8)
     j = 0
+    
     for chunk in [data[i:i + chunk_size] for i in offsets]:
-        checsum = check(chunk)
-        theChunk = make(j, checsum, chunk)
+        theChunk = sendChunkN(j, data)
+        theChunk2 = sendChunkN(j,data)
+        if j != offsets[-1]/chunk_size:
+            theChunk2 = sendChunkN(j + 1, data)
         j = j + 1
         sent = False
         while not sent:
             #sock.send(theChunk)
-            print("packet sent ", (j-1), " - ", checsum)
+            print("packet sent ", (j-1))
             try:
                 returndata = sock.recv(util.MAX_PACKET)
                 ackNum, checksum, nothing = extract(returndata)
@@ -52,11 +55,23 @@ def send(sock: socket.socket, data: bytes):
                     print("packet ack recieved ", ackNum)
             except socket.timeout:
                 sock.send(theChunk)
-                sock.send(theChunk)
+                sock.send(theChunk2)
         logger.info("Pausing for %f seconds", round(pause, 2))
         time.sleep(pause)
 
 
+def sendChunkN(n, data: bytes):
+    chunk_size = util.MAX_PACKET-8
+    offsets = range(0, len(data), util.MAX_PACKET-8)
+    j = 0
+    for chunk in [data[i:i + chunk_size] for i in offsets]:
+        if j == n:
+            checsum = check(chunk)
+            theChunk = make(j, checsum, chunk)
+            return theChunk
+        else:
+            j += 1
+            
 def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
     """
     Implementation of the receiving logic for receiving data over a slow,
@@ -75,6 +90,8 @@ def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
     num_bytes = 0
     sameNumber = 0
     currentNum = 0
+    #changeableBuffer = io.BytesIO(bytearray(1392))
+    #change = changeableBuffer.getbuffer()
     while True:
         data = sock.recv(util.MAX_PACKET)
         theNum, checksum, theData = extract(data)
@@ -85,13 +102,17 @@ def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
             sameNumber = 0
             print("packet recieved ", theNum, " - acknum - ", currentNum)
             logger.info("Received %d bytes", len(data))
+            print (num_bytes)
+            print (num_bytes + len(theData))
+            num1 = int(num_bytes)
+            num2 = int(len(theData)) + num1
             dest.write(theData)
             num_bytes += len(theData)
             dest.flush()
         else:
             if theNum + 1 == currentNum:
                 sameNumber += 1
-            if sameNumber >= 2:
+            if sameNumber >= 1:
                 sock.send(make(theNum,0))
             print(theNum, " <- packet being sent ", currentNum, " <- packet wanted")
         if not data:
