@@ -25,52 +25,47 @@ def send(sock: socket.socket, data: bytes):
                 over a simulated lossy network.
         data -- A bytes object, containing the data to send over the network.
     """
-
-    # Naive implementation where we chunk the data to be sent into
-    # packets as large as the network will allow, and then send them
-    # over the network, pausing half a second between sends to let the
-    # network "rest" :)
     logger = util.logging.get_logger("project-sender")
-    chunk_size = util.MAX_PACKET-8
-    pause = .0001
-    sock.settimeout(.00001)
+
     offsets = range(0, len(data), util.MAX_PACKET-8)
-    j = 0
+    chunk_size = util.MAX_PACKET-8
+    thetimeout = .005
+    sock.settimeout(thetimeout)
     
-    for chunk in [data[i:i + chunk_size] for i in offsets]:
-        theChunk = sendChunkN(j, data)
-        theChunk2 = sendChunkN(j,data)
-        if j != offsets[-1]/chunk_size:
-            theChunk2 = sendChunkN(j + 1, data)
-        j = j + 1
-        sent = False
-        while not sent:
-            #sock.send(theChunk)
-            print("packet sent ", (j-1))
+    sending = True
+    i = 0
+    
+    while sending:
+        chunk1 = sendChunkN(i, data)
+        time1 = time.time()
+        chunk2 = chunk1
+        if i != offsets[-1]/chunk_size:
+            chunk2 = sendChunkN(i + 1, data)
+        waiting = True
+        while waiting:
+            sock.send(chunk1)
+            sock.send(chunk2)
+            if i == offsets[-1]/chunk_size:
+                sending = False
             try:
-                returndata = sock.recv(util.MAX_PACKET)
-                ackNum, checksum, nothing = extract(returndata)
-                if ackNum == (j - 1):
-                    sent = True
-                    print("packet ack recieved ", ackNum)
+                returndata1 = sock.recv(util.MAX_PACKET)
+                time2 = time.time()
+                thetimeout = avgTimeBetweenPackets(thetimeout, (time2 - time1))
+                sock.settimeout(thetimeout + (time2 - time1) * .15)
+                print("timeout amount - ", thetimeout)
+                ackNum1, checksum1, nothing1 = extract(returndata1)
+                i = ackNum1 + 1
+                waiting = False
+                try:
+                    returndata2 = sock.recv(util.MAX_PACKET)
+                    ackNum2, checksum2, nothing2 = extract(returndata2)
+                    if ackNum2 > i:
+                        i = ackNum2 + 1
+                except socket.timeout:
+                    print("did not recieve chunk expected")
             except socket.timeout:
-                sock.send(theChunk)
-                sock.send(theChunk2)
-        logger.info("Pausing for %f seconds", round(pause, 2))
-        time.sleep(pause)
-
-
-def sendChunkN(n, data: bytes):
-    chunk_size = util.MAX_PACKET-8
-    offsets = range(0, len(data), util.MAX_PACKET-8)
-    j = 0
-    for chunk in [data[i:i + chunk_size] for i in offsets]:
-        if j == n:
-            checsum = check(chunk)
-            theChunk = make(j, checsum, chunk)
-            return theChunk
-        else:
-            j += 1
+                print("did not recieve any ack resending chunk1 and chunk2")
+                
             
 def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
     """
@@ -96,16 +91,11 @@ def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
         data = sock.recv(util.MAX_PACKET)
         theNum, checksum, theData = extract(data)
         if (check(theData)) == checksum and currentNum == theNum:
-            print("packet recieved ", theNum, " - checksum - ", checksum)
             sock.send(make(theNum,0))
             currentNum += 1
             sameNumber = 0
-            print("packet recieved ", theNum, " - acknum - ", currentNum)
             logger.info("Received %d bytes", len(data))
-            print (num_bytes)
-            print (num_bytes + len(theData))
-            num1 = int(num_bytes)
-            num2 = int(len(theData)) + num1
+            print (num_bytes, " - ", num_bytes + len(theData), " --Recieved: ", theNum)
             dest.write(theData)
             num_bytes += len(theData)
             dest.flush()
@@ -118,6 +108,22 @@ def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
         if not data:
             break
     return num_bytes
+    
+def avgTimeBetweenPackets(currentAvg, newEntry):
+    currentAvg = currentAvg *.67 + newEntry * .33
+    return currentAvg
+    
+def sendChunkN(n, data: bytes):
+    chunk_size = util.MAX_PACKET-8
+    offsets = range(0, len(data), util.MAX_PACKET-8)
+    j = 0
+    for chunk in [data[i:i + chunk_size] for i in offsets]:
+        if j == n:
+            checsum = check(chunk)
+            theChunk = make(j, checsum, chunk)
+            return theChunk
+        else:
+            j += 1
     
 def make(seq_num, checksum, data = b''):
     seq_bytes = seq_num.to_bytes(4, byteorder = 'little', signed = True)
