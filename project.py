@@ -34,39 +34,39 @@ def send(sock: socket.socket, data: bytes):
     
     sending = True
     i = 0
+    connectionOver = 0
     
     while sending:
-        if isLast(i,data):
-            almostDone = True
-            while almostDone:
-                sock.send(sendChunkN(i,data))
-                try:
-                    lastChunk = sock.recv(util.MAX_PACKET)
-                    lastChunkAck, lastCheckSum, lastData = extract(lastChunk)
-                    if isLast(lastChunkAck, data):
-                        sending = False
-                        i = i-1
-                        almostDone = False
-                except socket.timeout:
-                    print("did not recieve chunk expected")
-        if not sending:
-            break 
         chunk1 = sendChunkN(i, data)
         chunk2 = chunk1
+        waiting = True
         if not isLast(i,data):
             chunk2 = sendChunkN(i + 1, data)
-        waiting = True
+        else:
+            while waiting:
+                sock.send(chunk1)
+                print("problems sending last chunk")
+                try:
+                    finaldata = sock.recv(util.MAX_PACKET)
+                    finalAck, finalCheck, finalDataPacket = extract(finaldata)
+                    if isLast(finalAck,data):
+                        sending = False 
+                        waiting = False
+                except socket.timeout:
+                    print("just waiting on last packet")
+    
         while waiting:
             try:
                 sock.send(chunk1)
                 time1 = time.time()
                 sock.send(chunk2)
-
+                connectionOver = 0
             except TypeError:
+                connectionOver += 1
+                if connectionOver > 20:
+                    sending = False
                 print("something is wrong")
-
- #           if isLast(i,data):
- #               sending = False
+                waiting = False
             try:
                 returndata1 = sock.recv(util.MAX_PACKET)
                 time2 = time.time()
@@ -77,6 +77,8 @@ def send(sock: socket.socket, data: bytes):
                 if i < ackNum1 + 1:
                     i = ackNum1 + 1
                 waiting = False
+                if isLast(ackNum1,data):
+                    sending = False 
             except socket.timeout:
                 print("did not recieve chunk expected")
             try:
@@ -84,6 +86,9 @@ def send(sock: socket.socket, data: bytes):
                 ackNum2, checksum2, nothing2 = extract(returndata2)
                 if ackNum2 > i:
                     i = ackNum2 + 1
+                waiting = False
+                if isLast(ackNum2,data):
+                    sending = False 
             except socket.timeout:
                 print("did not recieve chunk expected")
                 
@@ -113,6 +118,7 @@ def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
         theNum, checksum, theData = extract(data)
         if (check(theData)) == checksum and currentNum == theNum:
             sock.send(make(theNum,0))
+            print("ack--> ", currentNum)
             currentNum += 1
             sameNumber = 0
             logger.info("Received %d bytes", len(data))
