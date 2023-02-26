@@ -48,7 +48,9 @@ def send(sock: socket.socket, data: bytes):
                         i = i-1
                         almostDone = False
                 except socket.timeout:
-                    print("did not recieve chunk expected") 
+                    print("did not recieve chunk expected")
+        if not sending:
+            break 
         chunk1 = sendChunkN(i, data)
         time1 = time.time()
         chunk2 = chunk1
