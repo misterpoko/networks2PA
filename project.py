@@ -58,8 +58,13 @@ def send(sock: socket.socket, data: bytes):
             chunk2 = sendChunkN(i + 1, data)
         waiting = True
         while waiting:
-            sock.send(chunk1)
-            sock.send(chunk2)
+            try:
+                sock.send(chunk1)
+                sock.send(chunk2)
+
+            except TypeError:
+                print("something is wrong")
+
             if isLast(i,data):
                 sending = False
             try:
