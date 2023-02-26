@@ -52,7 +52,6 @@ def send(sock: socket.socket, data: bytes):
         if not sending:
             break 
         chunk1 = sendChunkN(i, data)
-        time1 = time.time()
         chunk2 = chunk1
         if not isLast(i,data):
             chunk2 = sendChunkN(i + 1, data)
@@ -60,13 +59,14 @@ def send(sock: socket.socket, data: bytes):
         while waiting:
             try:
                 sock.send(chunk1)
+                time1 = time.time()
                 sock.send(chunk2)
 
             except TypeError:
                 print("something is wrong")
 
-            if isLast(i,data):
-                sending = False
+ #           if isLast(i,data):
+ #               sending = False
             try:
                 returndata1 = sock.recv(util.MAX_PACKET)
                 time2 = time.time()
@@ -74,17 +74,18 @@ def send(sock: socket.socket, data: bytes):
                 sock.settimeout(thetimeout + (time2 - time1) * .15)
                 print("timeout amount - ", thetimeout)
                 ackNum1, checksum1, nothing1 = extract(returndata1)
-                i = ackNum1 + 1
+                if i < ackNum1 + 1:
+                    i = ackNum1 + 1
                 waiting = False
-                try:
-                    returndata2 = sock.recv(util.MAX_PACKET)
-                    ackNum2, checksum2, nothing2 = extract(returndata2)
-                    if ackNum2 > i:
-                        i = ackNum2 + 1
-                except socket.timeout:
-                    print("did not recieve chunk expected")
             except socket.timeout:
-                print("did not recieve any ack resending chunk1 and chunk2")
+                print("did not recieve chunk expected")
+            try:
+                returndata2 = sock.recv(util.MAX_PACKET)
+                ackNum2, checksum2, nothing2 = extract(returndata2)
+                if ackNum2 > i:
+                    i = ackNum2 + 1
+            except socket.timeout:
+                print("did not recieve chunk expected")
                 
             
 def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
