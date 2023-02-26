@@ -36,16 +36,29 @@ def send(sock: socket.socket, data: bytes):
     i = 0
     
     while sending:
+        if isLast(i,data):
+            almostDone = True
+            while almostDone:
+                sock.send(sendChunkN(i,data))
+                try:
+                    lastChunk = sock.recv(util.MAX_PACKET)
+                    lastChunkAck, lastCheckSum, lastData = extract(lastChunk)
+                    if isLast(lastChunkAck, data):
+                        sending = False
+                        i = i-1
+                        almostDone = False
+                except socket.timeout:
+                    print("did not recieve chunk expected") 
         chunk1 = sendChunkN(i, data)
         time1 = time.time()
         chunk2 = chunk1
-        if i != offsets[-1]/chunk_size:
+        if not isLast(i,data):
             chunk2 = sendChunkN(i + 1, data)
         waiting = True
         while waiting:
             sock.send(chunk1)
             sock.send(chunk2)
-            if i == offsets[-1]/chunk_size:
+            if isLast(i,data):
                 sending = False
             try:
                 returndata1 = sock.recv(util.MAX_PACKET)
@@ -124,6 +137,12 @@ def sendChunkN(n, data: bytes):
             return theChunk
         else:
             j += 1
+
+def isLast(i, data):
+    offsets = range(0, len(data), util.MAX_PACKET-8)
+    chunk_size = util.MAX_PACKET-8
+    return i == offsets[-1]/chunk_size
+    
     
 def make(seq_num, checksum, data = b''):
     seq_bytes = seq_num.to_bytes(4, byteorder = 'little', signed = True)
