@@ -130,7 +130,7 @@ def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
             if theNum + 1 == currentNum:
                 sameNumber += 1
             if sameNumber >= 1:
-                sock.send(make(theNum,0))
+                sock.send(make(currentNum -1 ,0))
             print(theNum, " <- packet being sent ", currentNum, " <- packet wanted")
         if not data:
             break
