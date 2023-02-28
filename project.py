@@ -31,67 +31,61 @@ def send(sock: socket.socket, data: bytes):
     chunk_size = util.MAX_PACKET-8
     thetimeout = .005
     sock.settimeout(thetimeout)
-    
+    currentWindowSize = 2
     sending = True
-    i = 0
+    j = 0
+    timeoutAmount = 0
     connectionOver = 0
-    
+    sendingCurrentWindow = True
+    done = False
+    k = 0
     while sending:
-        chunk1 = sendChunkN(i, data)
-        chunk2 = chunk1
-        waiting = True
-        if not isLast(i,data):
-            chunk2 = sendChunkN(i + 1, data)
-        else:
+        i = 0
+        while sendingCurrentWindow:
+            sendChunkz(j,currentWindowSize, data, sock, done)
+            if done:
+                break
+            time1 = time.time()
+            currentWindowSize += 1
+            first = True
+            waiting = True
             while waiting:
-                sock.send(chunk1)
-                print("problems sending last chunk")
                 try:
-                    finaldata = sock.recv(util.MAX_PACKET)
-                    finalAck, finalCheck, finalDataPacket = extract(finaldata)
-                    if isLast(finalAck,data):
-                        sending = False 
+                    returnData = sock.recv(util.MAX_PACKET)
+                    ackNum, checksum, noData = extract(returnData)
+                    print("ack ", ackNum)
+                    if j <= ackNum:
+                        j = ackNum + 1
+                    timeoutAmount = 0
+                    if isLast(j - 1, data):
                         waiting = False
+                        sending = False
+                        sendingCurrentWindow = False
+                        return
                 except socket.timeout:
-                    print("just waiting on last packet")
-    
-        while waiting:
-            try:
-                sock.send(chunk1)
-                time1 = time.time()
-                sock.send(chunk2)
-                connectionOver = 0
-            except TypeError:
-                connectionOver += 1
-                if connectionOver > 20:
-                    sending = False
-                print("something is wrong")
-                waiting = False
-            try:
-                returndata1 = sock.recv(util.MAX_PACKET)
-                time2 = time.time()
-                thetimeout = avgTimeBetweenPackets(thetimeout, (time2 - time1))
-                sock.settimeout(thetimeout + (time2 - time1) * .15)
-                print("timeout amount - ", thetimeout)
-                ackNum1, checksum1, nothing1 = extract(returndata1)
-                if i < ackNum1 + 1:
-                    i = ackNum1 + 1
-                waiting = False
-                if isLast(ackNum1,data):
-                    sending = False 
-            except socket.timeout:
-                print("did not recieve chunk expected")
-            try:
-                returndata2 = sock.recv(util.MAX_PACKET)
-                ackNum2, checksum2, nothing2 = extract(returndata2)
-                if ackNum2 > i:
-                    i = ackNum2 + 1
-                waiting = False
-                if isLast(ackNum2,data):
-                    sending = False 
-            except socket.timeout:
-                print("did not recieve chunk expected")
-                
+                    if first:
+                        time2 = time.time()
+                        thetimeout = avgTimeBetweenPackets(thetimeout,(time2 - time1))
+                        sock.settimeout(thetimeout)
+                        first = False
+                    print("waiting on chunk")
+                    timeoutAmount += 1
+                    if timeoutAmount == 3:
+                        currentWindowSize = round(currentWindowSize * .5)
+                        if currentWindowSize <= 0:
+                            currentWindowSize = 1
+                    waiting = False
+                    time.sleep(thetimeout)
+                        
+                if time.time() - time1 >= (thetimeout * currentWindowSize):
+                    waiting = False
+            
+            
+                    
+                    
+ 
+            
+                           
             
 def recv(sock: socket.socket, dest: io.BufferedIOBase) -> int:
     """
@@ -151,6 +145,36 @@ def sendChunkN(n, data: bytes):
             return theChunk
         else:
             j += 1
+
+def sendChunkz(n,amount, data: bytes, sock: socket.socket, done):
+    sending = True
+    i = 0
+    j = 0
+    while sending:
+        if not isLast(n + i, data) and i < amount:
+            chunk = sendChunkN(n + i, data)
+            try:
+                sock.send(chunk)
+                i += 1
+                j = 0
+            except TypeError:
+                print("wrong type")
+                j += 1
+                if j >= 20:
+                    done = True
+                    i += 1 
+        elif i < amount:
+            chunk = sendChunkN(n + i, data)
+            try:
+                sock.send(chunk)
+                i += 1
+                done = True
+            except TypeError:
+                print("wrong type last")
+        else:
+            sending = False
+                
+        
 
 def isLast(i, data):
     offsets = range(0, len(data), util.MAX_PACKET-8)
