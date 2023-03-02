@@ -75,7 +75,7 @@ def send(sock: socket.socket, data: bytes):
                         if currentWindowSize <= 0:
                             currentWindowSize = 1
                     waiting = False
-                    time.sleep(thetimeout*1.10)
+                    time.sleep(thetimeout*1.25)
                         
                 if time.time() - time1 >= (thetimeout * currentWindowSize):
                     waiting = False
